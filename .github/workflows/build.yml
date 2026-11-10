@@ -1,0 +1,36 @@
+name: build-image
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 2 * * 0"      # wöchentlich nachts neu bauen → Fedora-Updates landen automatisch im Image
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Platz auf dem Runner schaffen
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      - name: Variablen setzen
+        run: |
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/raum401-os" >> $GITHUB_ENV
+          echo "DATE=$(date +%Y%m%d)" >> $GITHUB_ENV
+
+      - name: Image bauen
+        run: podman build -t "$IMAGE:latest" -t "$IMAGE:$DATE" .
+
+      - name: Bei GHCR anmelden
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Pushen
+        run: |
+          podman push "$IMAGE:latest"
+          podman push "$IMAGE:$DATE"
